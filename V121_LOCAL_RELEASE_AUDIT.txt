@@ -1,0 +1,7 @@
+StockFlow v1.2.1 local release audit
+
+Target version: 1.2.1+19
+Root cause fixed: dependency solver conflict between http 1.2.2 and geolocator 14.0.3.
+Expected compatible graph: geolocator 14.0.3 -> package_info_plus ^10.0.0 -> http ^1.6.0.
+Package-level checks should verify YAML/JSON syntax, Dart relative imports, workflow artifact versioning, dependency constraints, merge markers, and ZIP integrity.
+Flutter SDK is not available in the packaging sandbox; GitHub Actions remains the authoritative analyzer/test/build gate.

@@ -1,0 +1,35 @@
+StockFlow v1.4.0+25 local release audit
+========================================
+
+Release focus
+- Explicit Browse stock as guest first-run action.
+- Guest-safe categories/feed/listing API reads with public field allow-list.
+- Full private seller pickup/dispatch address fields.
+- Foreground runtime location permission + reverse geocoding address autofill.
+- Checkout current-location address autofill.
+- Shared private address table for Android/iOS/future web/admin operations.
+- v1.3 mediated-deal, promise-fee, contact-blocking and rate-limit architecture retained.
+
+Live Supabase changes applied
+- guest_browsing_full_addresses migration
+- listing_address_records migration
+- stockflow-api-v3 v6 ACTIVE
+
+Local static validation
+- YAML parse: PASS
+- JSON parse: PASS
+- Relative Dart imports: PASS
+- Dart delimiter scan: PASS (34 files)
+- Admin inline JavaScript node --check: PASS
+- TypeScript syntax-class scan: PASS (Deno/npm resolution unavailable locally as expected)
+- Secret leakage guards: PASS
+- Android Source package preflight: PASS
+- Android Design-system regression guard: PASS
+- iOS Source package preflight: PASS
+- iOS Client safety + design guard: PASS
+- Version/artifact guards: PASS
+- Mediated security regression guards: PASS
+- Merge-marker scan: PASS
+
+Limit
+Flutter/Dart SDK is not installed in this packaging environment. GitHub Actions remains the authority for flutter pub get, flutter analyze --fatal-infos, widget tests, APK build and unsigned iOS compile.

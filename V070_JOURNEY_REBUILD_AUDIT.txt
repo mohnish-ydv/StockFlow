@@ -1,0 +1,71 @@
+StockFlow v0.7.0 — Marketplace Journey Rebuild Audit
+
+CLIENT INTENT INTERPRETATION
+PASS — treated OLX as a user-journey / information-architecture reference, not a visual template
+PASS — StockFlow brand colors, copy, B2B semantics and existing commerce flows retained
+PASS — no OLX logo, artwork, source code, promotional copy or proprietary visual assets added
+
+NAVIGATION / IA
+PASS — Home
+PASS — Chats
+PASS — central Sell action
+PASS — My stock
+PASS — Account
+PASS — Search removed from permanent bottom nav and opened from Home discovery
+
+HOME
+PASS — current location context
+PASS — top-level search surface
+PASS — category discovery
+PASS — recently viewed section
+PASS — fresh stock grid
+PASS — cart entry
+
+CHATS
+PASS — Buying / Selling contexts
+PASS — All / Offers / Orders filters
+PASS — listing-linked conversation rows
+PASS — existing chat thread + offer backend integration retained
+
+SELLER JOURNEY
+PASS — seller application split into 2 focused steps
+PASS — approved seller Sell tab simplified to an action hub
+PASS — listing creation rebuilt as a 5-step wizard
+PASS — category + inventory type
+PASS — photo + details
+PASS — price + quantity + MOQ
+PASS — fulfilment + location
+PASS — description + review + publish
+PASS — existing createListing payload fields retained
+
+MY STOCK
+PASS — dedicated seller-management screen
+PASS — Active / Other segmentation
+PASS — active, units and other summary metrics
+PASS — listing rows retain price, quantity, MOQ and status
+PASS — seller-order shortcut
+PASS — non-approved seller handoff to application/status
+
+ACCOUNT / SUPPORT
+PASS — shorter account destination
+PASS — marketplace activity grouped separately
+PASS — selling entry points grouped separately
+PASS — Settings moved to dedicated screen
+PASS — Help & safety moved to dedicated screen
+PASS — Terms & Conditions and Privacy Policy retained
+
+STATIC QA
+PASS — required source files present
+PASS — 29 Dart files passed delimiter scan
+PASS — all relative Dart imports resolve
+PASS — GitHub workflow YAML parse
+PASS — JSON parse
+PASS — no merge-conflict markers
+PASS — privileged Supabase secret guard
+PASS — legacy prototype-token guard
+PASS — ProductImage referenced by >= 6 screens
+PASS — Android launcher icon sizes present
+PASS — 1024x1024 master icon present
+
+RUNTIME NOTE
+Flutter SDK is not installed in the packaging sandbox. GitHub Actions remains the authoritative gate for flutter analyze, widget tests, Android release APK and unsigned iOS release compile.

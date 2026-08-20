@@ -1,0 +1,97 @@
+name: StockFlow Admin Pages
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/admin/**'
+      - '.github/workflows/admin-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: stockflow-admin-pages
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate admin frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s docs/admin/index.html
+          test -f docs/admin/.nojekyll
+          grep -q '<title>StockFlow Operations</title>' docs/admin/index.html
+          grep -q 'Marketplace control center' docs/admin/index.html
+          grep -q 'stockflow-api-v3' docs/admin/index.html
+          grep -q 'stockflow-extensions' docs/admin/index.html
+          grep -q 'data-tab="moderation"' docs/admin/index.html
+          grep -q 'data-tab="sellers"' docs/admin/index.html
+          grep -q 'data-tab="users"' docs/admin/index.html
+          grep -q 'data-tab="deals"' docs/admin/index.html
+          grep -q 'data-tab="reports"' docs/admin/index.html
+          grep -q 'Listing moderation' docs/admin/index.html
+          grep -q 'Seller verification' docs/admin/index.html
+          grep -q 'User operations' docs/admin/index.html
+          grep -q 'adminListingDetail' docs/admin/index.html
+          grep -q 'adminReviewListing' docs/admin/index.html
+          grep -q 'adminSetUserStatus' docs/admin/index.html
+          grep -q 'adminDealRequests' docs/admin/index.html
+          grep -q 'adminQueueCounts' docs/admin/index.html
+          grep -q 'listingPager' docs/admin/index.html
+          grep -q 'data-action=\"page\"' docs/admin/index.html
+          grep -q 'Top product performance' docs/admin/index.html
+          grep -q 'Approximate supply map' docs/admin/index.html
+          grep -q 'Diagnostics' docs/admin/index.html
+          grep -q 'leaflet' docs/admin/index.html
+          test -s docs/admin/404.html
+          if grep -RInE 'sb_secret_|SUPABASE_SERVICE_ROLE_KEY|service_role|AQ\.[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{20,}' docs/admin; then
+            echo 'Privileged credential reference found in admin frontend.'
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('docs/admin/index.html').read_text()
+          # The admin intentionally has one external Leaflet script and one inline
+          # StockFlow application script. Validate balanced script tags instead of
+          # assuming there can only be a single closing </script> tag.
+          assert html.count('<script') == html.count('</script>')
+          assert html.count('<script>') == 1
+          assert re.search(r'<script\s+[^>]*src=[\"\'][^\"\']*leaflet[^\"\']*[\"\'][^>]*></script>', html, re.I)
+          assert html.count('<html') == 1 and html.count('</html>') == 1
+          print('Admin static-site validation passed.')
+          # Extract the one inline application script for Node syntax validation.
+          inline = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, re.S | re.I)
+          inline = [body for body in inline if 'const API=' in body]
+          assert len(inline) == 1
+          Path('/tmp/stockflow-admin-inline.js').write_text(inline[0])
+          PY
+          node --check /tmp/stockflow-admin-inline.js
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload admin site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/admin
+      - name: Deploy admin site
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Print admin URL
+        run: echo "Admin deployed to ${{ steps.deployment.outputs.page_url }}"

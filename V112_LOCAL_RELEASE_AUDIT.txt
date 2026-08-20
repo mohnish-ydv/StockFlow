@@ -1,0 +1,8 @@
+StockFlow v1.1.2+17 — responsive auth switch audit
+
+CI log root cause repaired:
+- flutter analyze --fatal-infos was already clean on Android and iOS.
+- widget test exposed a RenderFlex overflow in auth_screen.dart mode switch row at 430 px width.
+- replaced fixed Row with centered Wrap so the prompt/action can wrap naturally on narrow devices and larger text scales.
+- retained a 48 px minimum tap target for the auth action.
+- registration consent and lean sign-in behavior remain unchanged.

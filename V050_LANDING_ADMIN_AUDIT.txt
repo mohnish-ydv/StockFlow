@@ -1,0 +1,40 @@
+StockFlow v0.5.0 — Landing + Admin Pages Repair Audit
+
+BASE
+- Recovered from StockFlow-v0.4.1-Full-CI-Fix standalone source package.
+
+CLIENT ASK — LANDING EXPERIENCE
+PASS — Added lib/screens/landing_screen.dart.
+PASS — Signed-out users now land on a deliberate marketplace welcome screen before auth.
+PASS — Authenticated sessions bypass landing and open the marketplace directly.
+PASS — Get Started and Sign In routes are explicit.
+PASS — Auth can navigate back to landing.
+PASS — Logout returns to landing.
+PASS — Entrance motion is restrained and honors MediaQuery.disableAnimations.
+PASS — Widget regression test added for landing CTA/copy.
+
+ADMIN 404 REPAIR
+PASS — Restored static admin frontend at docs/admin/index.html.
+PASS — Added docs/admin/.nojekyll.
+PASS — Added .github/workflows/admin-pages.yml using official Pages artifact/deploy flow.
+PASS — Admin frontend redesigned to match StockFlow's light marketplace visual language.
+PASS — Admin frontend uses only the publishable Supabase client key; privileged secret patterns absent.
+PASS — ADMIN_ACCESS.md documents the one-time GitHub Pages source setting and staging credentials.
+
+STATIC VALIDATION
+PASS — GitHub Actions YAML parses.
+PASS — iOS AppIcon Contents.json parses.
+PASS — Admin JavaScript passes node --check.
+PASS — Admin HTML structure checks.
+PASS — 25 Dart files delimiter/static structure scan.
+PASS — Local Dart import resolution.
+PASS — Android launcher dimensions 48/72/96/144/192.
+PASS — 1024x1024 master icon.
+PASS — No merge conflict markers.
+PASS — No legacy AI/prototype UI tokens in app/admin frontend.
+
+ENVIRONMENT LIMIT
+- Flutter SDK is not installed in this sandbox, so flutter analyze, flutter test,
+  Android release build and iOS unsigned compile remain authoritative GitHub Actions gates.
+- GitHub Pages itself must be enabled once in repository Settings -> Pages -> Source -> GitHub Actions.
+  The standard GITHUB_TOKEN cannot enable a Pages site that does not yet exist.

@@ -1,0 +1,37 @@
+StockFlow v1.5.0 repair + pagination audit
+Date: 2026-08-20
+
+Uploaded CI failure root cause
+- Android and iOS both stopped at `flutter analyze --fatal-infos`.
+- Exactly three `prefer_const_constructors` infos were present:
+  - lib/screens/home_shell.dart:218
+  - lib/widgets/sf_map.dart:175
+  - lib/widgets/sf_map.dart:176
+- All three were corrected with const construction/context.
+
+Admin scale audit
+- Existing admin endpoints used hard `.limit(...)` caps without page navigation.
+- Added server-side pagination + exact totals to:
+  - adminListingsV2
+  - adminApplicationsV2
+  - adminUsers
+  - adminReports
+  - adminDealRequests
+- Added exact admin queue counters so dashboard/nav counts are not distorted by the current page.
+- Added Previous/Next pagers for listings, sellers, users, deals, orders and reports.
+- Listing title and user/phone search now request page 1 from the server instead of filtering only a previously loaded capped dataset.
+- Orders retain the legacy protected adminOrders data source and are paged client-side to avoid changing its unknown legacy response contract.
+
+Database performance hardening
+- Added migration 20260820110000_admin_pagination_indexes.sql.
+- Adds newest-first, queue and admin enrichment indexes for users, seller applications, listings, reports, deals, orders and promise-fee lookups.
+
+Local validation
+- Admin HTML structure checks passed.
+- Inline admin JavaScript passed `node --check`.
+- Modified Edge Function TypeScript files passed TypeScript parser diagnostics with zero syntax errors.
+- New migration is present in Android and iOS CI source-package preflight lists.
+- Admin Pages workflow now guards pagination/queue-count integration.
+
+Environment limitation
+- Flutter SDK is not installed in this sandbox, so the GitHub-only `flutter analyze`, `flutter test`, APK build and iOS compile steps could not be rerun locally. The uploaded logs had already passed dependency resolution and all pre-analyze guards; the only recorded CI blockers were the three const infos fixed above.

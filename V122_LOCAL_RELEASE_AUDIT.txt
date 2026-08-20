@@ -1,0 +1,25 @@
+StockFlow v1.2.2 local release audit
+Target version: 1.2.2+20
+Source basis: StockFlow-v1.2.1-Client-Requirements-Dependency-Fix.zip
+CI evidence: logs_87150021404.zip
+
+Repairs:
+- _extensionPost parameter grammar fixed; bestEffort is a valid named parameter.
+- diagnostics.dart unnecessary dart:ui import removed.
+- chat offer/counter ApiException constructors made const.
+- iOS shell workflow handles Flutter 3.44+ SwiftPM projects with no ios/Podfile.
+- CocoaPods-only geolocator macro patch remains when Podfile exists.
+- Android/iOS artifact names bumped to v1.2.2.
+
+Local structural checks:
+- YAML parse: PASS
+- JSON parse: PASS
+- 35 Dart files balanced-delimiter scan: PASS
+- Relative imports: PASS
+- Admin JavaScript node --check: PASS
+- Workflow run scripts bash -n: PASS
+- Exact Gemini key/prefix leakage: PASS (not present)
+- Version/artifact guards: PASS
+
+Flutter/Dart SDK is not installed in this packaging sandbox. GitHub Actions remains the authoritative
+flutter analyze, widget test, Android release and iOS compile gate.

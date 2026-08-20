@@ -1,0 +1,35 @@
+StockFlow v1.5.0+26 local release audit
+
+Scope delivered:
+- moderated listing submission / rejection reason / seller resubmission
+- max 8 media, max 2 videos, video <=30 sec / <=10 MB, image <=5 MB
+- signed direct-to-Storage media upload ticket flow
+- compact marketplace home + server-configurable promotion banner + category discovery
+- public approximate 10 km listing-area map; exact address/GPS remain private/admin-only
+- richer optional seller verification (GSTIN/PAN/Udyam/legal/business fields)
+- strict sign-in vs registration intent (unknown sign-in number never auto-registers)
+- professional admin operations console with moderation/media/users/sellers/deals/orders/reports/diagnostics
+- delegated admin action handling so dynamically rendered user/listing buttons work
+- compact protected chat bubbles
+- shared app / future-web Supabase-Postgres and API contracts
+- existing mediated-deal / promise-fee / contact-exchange protections retained
+
+Backend state applied during this release:
+- listing_moderation_media_admin_upgrade migration
+- account_session_status_guard migration
+- stockflow-api-v3 v7 deployed
+- stockflow-staging-upload v3 deployed
+
+Local static QA:
+- YAML/JSON parse: PASS
+- 37 Dart files lexical delimiter + local relative-import scan: PASS
+- Edge Function TypeScript transpile syntax scan: PASS
+- Admin inline JavaScript node --check: PASS
+- Android source preflight + design/security regression guards: PASS
+- iOS source preflight + design/security/address regression guards: PASS
+- Admin Pages validator: PASS
+- client/Gemini secret leakage guards: PASS
+- merge marker scan: PASS
+
+Constraint:
+Flutter/Dart SDK is not installed in the packaging environment. GitHub Actions remains authoritative for flutter pub get, flutter analyze --fatal-infos, widget tests, Android APK and iOS unsigned compile.

@@ -1,0 +1,17 @@
+StockFlow v1.1.0+15 — local release audit
+
+PASS source package preflight
+PASS reference-quality design guard
+PASS no legacy prototype/AI-style tokens in lib
+PASS no SegmentedButton in sell/checkout/orders
+PASS 9 screens use ProductImage
+PASS relative Dart imports
+PASS YAML parse
+PASS JSON parse
+PASS merge-marker scan
+PASS 1024x1024 primary Android/iOS branding assets
+PASS Dart delimiter structural scan
+PASS ZIP integrity (after packaging)
+
+Environment limitation:
+Flutter/Dart SDK is not installed in the artifact container. GitHub Actions remains the authoritative gate for flutter analyze --fatal-infos, widget tests, Android release APK, and unsigned iOS compile.

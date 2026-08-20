@@ -1,0 +1,36 @@
+StockFlow v0.6.1 — CI/Auth Repair Audit
+
+ROOT CAUSE FROM logs_86980098212.zip
+- Android job reached Design-system regression guard then exited 1.
+- iOS job reached Client safety + design guard then exited 1.
+- Both workflows still ran: grep -q 'Good stock shouldn’t' lib/screens/landing_screen.dart
+- v0.6.0 intentionally replaced that headline, so the guard was stale.
+- Dependency resolution, staging backend smoke and live preview data smoke completed before the Android guard.
+
+PROACTIVE SOURCE FIXES
+- CI guards updated to the v0.6 landing/auth/legal contract.
+- Auth/legal source files added to source-package preflight.
+- AuthMode now initializes in initState instead of reading widget from a State field initializer.
+- Legal consent callback made nullable for disabled/busy state.
+- Auth top bar rebuilt into a narrow-phone-safe stacked layout.
+- Artifact names and CI agent updated to v0.6.1.
+- Package version: 0.6.1+8.
+
+LOCAL CHECKS
+PASS — mobile.yml YAML parse
+PASS — admin-pages.yml YAML parse
+PASS — all packaged JSON parses
+PASS — legacy prototype token guard
+PASS — privileged Supabase secret guard
+PASS — new landing copy guard
+PASS — distinct Register / Sign in guard
+PASS — Terms & Conditions guard
+PASS — Privacy Policy guard
+PASS — legal_screens.dart present
+PASS — all relative Dart imports resolve
+PASS — 26 Dart files delimiter/static-structure scan
+PASS — branding assets required by CI present
+PASS — ZIP integrity
+
+LIMITATION
+Flutter/Dart SDK is not installed in this sandbox. GitHub Actions must still run flutter analyze, flutter test, Android release build and iOS unsigned release compile.

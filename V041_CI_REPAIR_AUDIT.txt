@@ -1,0 +1,47 @@
+StockFlow v0.4.1 — Full Package / CI Repair Audit
+Date: 2026-08-17
+
+ROOT CAUSE FROM PROVIDED GITHUB ACTIONS LOGS
+- Android failed in Generate Android/iOS platform shells:
+  cp: cannot stat 'branding/android/mipmap-mdpi/ic_launcher.png'
+- iOS failed in the same shared shell-generation phase:
+  cp: branding/ios/AppIcon.appiconset: No such file or directory
+- The supplied StockFlow-v0.4-CI-Image-Fix.zip was patch-only (2 files), so the
+  repository did not contain the Flutter application or branding directories.
+- The subosito/flutter-action 429 message was a warning; setup subsequently
+  completed successfully from cache and was not the terminating failure.
+
+REPAIR
+- Restored complete StockFlow v0.4 source package.
+- Merged latest CI image-smoke workflow changes.
+- Restored all Android launcher density assets.
+- Restored full iOS AppIcon.appiconset.
+- Added Source package preflight to Android and iOS jobs so incomplete uploads fail
+  immediately with an explicit error instead of silently generating a blank project.
+- Kept design-system, secret, static-analysis, test, APK, and iOS compile gates.
+
+LOCAL VALIDATION
+PASS — 65 package files before this audit file
+PASS — workflow YAML parses
+PASS — iOS AppIcon Contents.json parses
+PASS — Android launcher PNG dimensions: 48, 72, 96, 144, 192
+PASS — master StockFlow icon: 1024x1024
+PASS — iOS App Store icon: 1024x1024
+PASS — all Contents.json referenced iOS icon files exist
+PASS — required source-package preflight files are present/non-empty
+PASS — no privileged Supabase client secret markers in lib/
+PASS — no blocked legacy/prototype UI tokens in lib/
+PASS — ProductImage used across 8 screens (CI requires >= 6)
+PASS — no merge-conflict markers
+PASS — 24 Dart files preserved unchanged from audited v0.4 source
+
+DIFF VS RECOVERED v0.4 CANDIDATE
+- Modified: .github/workflows/mobile.yml
+- Added: docs/CI_IMAGE_SMOKE_FIX.md
+- Added: docs/CI_FULL_PACKAGE_FIX.md
+- No Dart application source changed in this repair.
+
+ENVIRONMENT LIMITATION
+- Flutter SDK is not installed in this sandbox, so flutter analyze, flutter test,
+  Android release APK build, and unsigned iOS release compile cannot be executed
+  locally here. GitHub Actions remains the authoritative compile/test gate.

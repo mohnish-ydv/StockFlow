@@ -1,0 +1,16 @@
+StockFlow v0.7.1 — CI Analyzer Repair
+
+SOURCE: StockFlow v0.7.0 Marketplace Journey Rebuild
+LOGS: GitHub Actions run 87028319790
+
+ROOT CAUSE
+- 2 x const_with_non_const in lib/screens/my_stock_screen.dart
+- 1 x curly_braces_in_flow_control_structures in lib/screens/sell_screen.dart
+
+REPAIRS
+- Removed invalid const from ListView invocations while retaining const child widgets.
+- Wrapped mounted/setState image update in braces.
+- Version bumped to 0.7.1+11.
+- Android/iOS artifact labels and CI user-agent bumped to v0.7.1.
+
+No product journey features removed.

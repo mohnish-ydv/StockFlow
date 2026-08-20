@@ -1,0 +1,621 @@
+name: StockFlow Mobile CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stockflow-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android QA + Release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Source package preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            pubspec.yaml
+            lib/main.dart
+            lib/app.dart
+            lib/core/api.dart
+            lib/core/ad_config.dart
+            lib/core/diagnostics.dart
+            lib/core/location_service.dart
+            lib/core/motion.dart
+            lib/core/platform_ui.dart
+            lib/widgets/product_image.dart
+            lib/widgets/listing_card.dart
+            lib/widgets/sf_ui.dart
+            lib/widgets/sf_map.dart
+            lib/widgets/listing_media_gallery.dart
+            lib/screens/welcome_screen.dart
+            lib/screens/guest_account_screen.dart
+            lib/screens/auth_screen.dart
+            lib/screens/legal_screens.dart
+            lib/screens/home_shell.dart
+            lib/screens/home_screen.dart
+            lib/screens/chats_screen.dart
+            lib/screens/sell_screen.dart
+            lib/screens/my_stock_screen.dart
+            lib/screens/edit_listing_screen.dart
+            lib/screens/account_screen.dart
+            lib/screens/settings_screen.dart
+            lib/screens/help_safety_screen.dart
+            lib/screens/not_found_screen.dart
+            docs/404.html
+            docs/V140_GUEST_BROWSING_FULL_ADDRESS.md
+            docs/V150_MARKETPLACE_MODERATION_MEDIA_ADMIN.md
+            supabase/functions/stockflow-extensions/index.ts
+            supabase/functions/stockflow-api-v3/index.ts
+            supabase/functions/stockflow-staging-upload/index.ts
+            supabase/migrations/20260818121000_stockflow_client_final_features.sql
+            supabase/migrations/20260818122000_seller_approval_timestamps.sql
+            supabase/migrations/20260818122500_seller_approval_trigger_search_path_hardening.sql
+            supabase/migrations/20260818123000_client_feature_fk_index_hardening.sql
+            supabase/migrations/20260818214500_mediated_deals_web_security.sql
+            supabase/migrations/20260818222000_listing_contact_exchange_hardening.sql
+            supabase/migrations/20260818223000_mediated_deal_fk_indexes.sql
+            supabase/migrations/20260818224000_contact_filter_precision.sql
+            supabase/migrations/20260818224500_contact_phone_pattern_precision.sql
+            supabase/migrations/20260819110000_guest_browsing_full_addresses.sql
+            supabase/migrations/20260819111500_listing_address_records.sql
+            supabase/migrations/20260820090000_listing_moderation_media_admin_upgrade.sql
+            supabase/migrations/20260820093000_account_session_status_guard.sql
+            supabase/migrations/20260820110000_admin_pagination_indexes.sql
+            test/smoke_test.dart
+            branding/stockflow_icon_1024.png
+            branding/android/mipmap-mdpi/ic_launcher.png
+            branding/android/mipmap-hdpi/ic_launcher.png
+            branding/android/mipmap-xhdpi/ic_launcher.png
+            branding/android/mipmap-xxhdpi/ic_launcher.png
+            branding/android/mipmap-xxxhdpi/ic_launcher.png
+            branding/ios/AppIcon.appiconset/Contents.json
+            branding/ios/AppIcon.appiconset/Icon-AppStore-1024.png
+          )
+          for file in "${required[@]}"; do
+            if [[ ! -s "$file" ]]; then
+              echo "::error::Incomplete StockFlow source package: missing or empty $file"
+              exit 1
+            fi
+          done
+          echo "StockFlow source package preflight passed (${#required[@]} required files)."
+          grep -Eq '^  http: \^1\.6\.0$' pubspec.yaml
+          grep -Eq '^  geolocator: 14\.0\.3$' pubspec.yaml
+          grep -Eq '^  geocoding: 5\.0\.0$' pubspec.yaml
+          grep -Eq '^  flutter_map: \^8\.3\.1$' pubspec.yaml
+          grep -Eq '^  latlong2: \^0\.10\.1$' pubspec.yaml
+          grep -Eq '^  video_player: 2\.10\.1$' pubspec.yaml
+          echo 'Dependency compatibility preflight passed (network + location + maps + media).'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Generate Android/iOS platform shells
+        run: |
+          flutter create --platforms=android,ios --org com.stockflow --project-name stockflow .
+          rm -f test/widget_test.dart
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          text = p.read_text()
+          permissions = [
+              'android.permission.INTERNET',
+              'android.permission.ACCESS_COARSE_LOCATION',
+              'android.permission.ACCESS_FINE_LOCATION',
+          ]
+          marker = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
+          additions = ''.join(f'    <uses-permission android:name="{permission}"/>\n' for permission in permissions if permission not in text)
+          if additions:
+              text = text.replace(marker, marker + additions, 1)
+          text = text.replace('android:label="stockflow"', 'android:label="StockFlow"')
+          p.write_text(text)
+          PY
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp "branding/android/mipmap-$density/ic_launcher.png" "android/app/src/main/res/mipmap-$density/ic_launcher.png"
+          done
+          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_COARSE_LOCATION' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.ACCESS_FINE_LOCATION' android/app/src/main/AndroidManifest.xml
+          grep -q 'android:label="StockFlow"' android/app/src/main/AndroidManifest.xml
+          test -s android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Secret leakage guard
+        run: |
+          if grep -RInE 'sb_secret_|SUPABASE_SERVICE_ROLE_KEY|service_role' lib; then
+            echo 'Privileged Supabase credential reference found in Flutter client.'
+            exit 1
+          fi
+          if grep -RInE 'AQ\.[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{20,}' lib docs supabase .github --exclude='*.zip'; then
+            echo 'AI provider credential leaked into the repository.'
+            exit 1
+          fi
+
+      - name: Staging backend smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          API='https://zuzihcjpjwhrlfeushwd.supabase.co/functions/v1/stockflow-api-v3'
+          KEY='sb_publishable_2j8UInXQwgutcLhG2qhfhA_LAMR596R'
+          curl --fail --silent --show-error --max-time 20 \
+            -H "apikey: $KEY" -H 'content-type: application/json' \
+            -d '{"action":"health"}' "$API" | tee /tmp/stockflow-health.json
+          grep -q '"ok":true' /tmp/stockflow-health.json
+          grep -q '"moderatedListings":true' /tmp/stockflow-health.json
+          grep -q '"strictSignIn":true' /tmp/stockflow-health.json
+
+      - name: StockFlow extensions smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXT='https://zuzihcjpjwhrlfeushwd.supabase.co/functions/v1/stockflow-extensions'
+          KEY='sb_publishable_2j8UInXQwgutcLhG2qhfhA_LAMR596R'
+          curl --fail --silent --show-error --max-time 20 \
+            -H "apikey: $KEY" -H 'content-type: application/json' \
+            -d '{"action":"health"}' "$EXT" | tee /tmp/stockflow-extensions-health.json
+          grep -q '"ok":true' /tmp/stockflow-extensions-health.json
+
+      - name: Live preview data smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          API='https://zuzihcjpjwhrlfeushwd.supabase.co/functions/v1/stockflow-api-v3'
+          KEY='sb_publishable_2j8UInXQwgutcLhG2qhfhA_LAMR596R'
+
+          # Guest browsing must work without a session token.
+          curl --fail --silent --show-error --max-time 20 \
+            -H "apikey: $KEY" -H 'content-type: application/json' \
+            -d '{"action":"feed"}' "$API" > /tmp/stockflow-feed.json
+
+          python3 - <<'PY'
+          import json
+          feed=json.load(open('/tmp/stockflow-feed.json')).get('listings',[])
+          assert len(feed) >= 12, f'Guest preview feed is too sparse: {len(feed)} listings'
+          assert all(x.get('image_url') for x in feed[:12]), 'Top preview listings must have product photos'
+          assert not any('picsum.photos' in str(x.get('image_url','')) for x in feed), 'Random Picsum imagery leaked into preview feed'
+          assert not any('unsplash.com/photos/' in str(x.get('image_url','')) for x in feed), 'Legacy Unsplash download endpoint leaked into preview feed'
+          private_keys={'pincode','latitude','longitude','address_line1','street','locality','landmark','phone'}
+          assert all(not private_keys.intersection(x.keys()) for x in feed), 'Guest feed leaked private location/contact fields'
+          sellers={str(x.get('seller_id','')) for x in feed if x.get('seller_id')}
+          assert len(sellers) >= 4, f'Preview feed needs seller diversity; found {len(sellers)} sellers'
+          with open('/tmp/stockflow-image-urls.txt','w') as f:
+              for x in feed[:12]:
+                  f.write(str(x['image_url'])+'\n')
+          print(f'Guest preview feed: {len(feed)} listings, {len(sellers)} sellers')
+          PY
+
+          # Auth remains separately smoke-tested for protected actions.
+          curl --fail --silent --show-error --max-time 20 \
+            -H "apikey: $KEY" -H 'content-type: application/json' \
+            -d '{"action":"login","authMode":"signIn","phone":"7000000001","otp":"123456","fullName":"StockFlow Preview QA","city":"Delhi","state":"Delhi"}' \
+            "$API" > /tmp/stockflow-login.json
+          python3 - <<'PY'
+          import json
+          token=json.load(open('/tmp/stockflow-login.json')).get('sessionToken','')
+          assert len(token) >= 32, 'Preview login did not return a session token'
+          PY
+
+          while IFS= read -r image_url; do
+            echo "Checking product image: $image_url"
+            if ! curl --fail --location --silent --show-error \
+              --retry 2 --retry-all-errors --retry-delay 1 \
+              --connect-timeout 10 --max-time 25 \
+              -A 'StockFlow-CI/1.5.0 (GitHub Actions)' \
+              -o /dev/null "$image_url"; then
+              echo "::error::Preview product image is not publicly loadable: $image_url"
+              exit 1
+            fi
+          done < /tmp/stockflow-image-urls.txt
+
+      - name: Design-system regression guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s lib/core/platform_ui.dart
+          test -s lib/core/motion.dart
+          test -s lib/widgets/product_image.dart
+          test -s lib/widgets/listing_card.dart
+          test -s branding/stockflow_icon_1024.png
+          test -s lib/screens/order_success_screen.dart
+          test -s lib/screens/guest_account_screen.dart
+          ! grep -q "LandingScreen" lib/app.dart
+          grep -q "WelcomeScreen" lib/app.dart
+          grep -q "sf_welcome_v3_seen" lib/app.dart
+          grep -q "Surplus stock" lib/screens/welcome_screen.dart
+          grep -q "Browse stock as guest" lib/screens/welcome_screen.dart
+          grep -q "HomeShell" lib/app.dart
+          grep -q "GuestAccountScreen" lib/screens/home_shell.dart
+          grep -q "You’re browsing as a guest" lib/screens/guest_account_screen.dart
+          grep -q 'Create your account' lib/screens/auth_screen.dart
+          grep -q 'Enter the 6-digit code' lib/screens/auth_screen.dart
+          grep -q 'Welcome back' lib/screens/auth_screen.dart
+          grep -q 'Terms & Conditions' lib/screens/auth_screen.dart
+          grep -q 'Privacy Policy' lib/screens/auth_screen.dart
+          test -s lib/screens/legal_screens.dart
+          test -s lib/screens/my_stock_screen.dart
+          grep -q "label: 'My stock'" lib/screens/home_shell.dart
+          grep -q "title: 'Settings'" lib/screens/account_screen.dart
+          grep -q "title: 'Help & safety'" lib/screens/account_screen.dart
+          grep -q "label: 'Deals'" lib/screens/home_shell.dart
+          grep -q "label: 'Sell'" lib/screens/home_shell.dart
+          grep -q "Browse categories" lib/screens/home_screen.dart
+          grep -q "Fresh stock" lib/screens/home_screen.dart
+          grep -q "Recently viewed" lib/screens/home_screen.dart
+          grep -q "label: 'Buying'" lib/screens/chats_screen.dart
+          grep -q "label: 'Selling'" lib/screens/chats_screen.dart
+          grep -q "I’m interested" lib/screens/listing_detail_screen.dart
+          ! grep -q "Make offer" lib/screens/listing_detail_screen.dart
+          grep -q "Checkout" lib/screens/checkout_screen.dart
+          grep -Eq 'Step \$\{step\+1\} of 4|Step \$\{step \+ 1\} of 4' lib/screens/sell_screen.dart
+          grep -q "Submit for review" lib/screens/sell_screen.dart
+          grep -Eq 'Generate.*AI' lib/screens/sell_screen.dart
+          grep -q "pickMultipleMedia" lib/screens/sell_screen.dart
+          grep -q "maxMedia = 8" lib/screens/sell_screen.dart
+          grep -q "maxVideos = 2" lib/screens/sell_screen.dart
+          grep -q "maxVideoSeconds = 30" lib/screens/sell_screen.dart
+          grep -q "GSTIN (optional)" lib/screens/sell_screen.dart
+          grep -q "Choose on map" lib/screens/sell_screen.dart
+          grep -q "Submitted for review" lib/screens/sell_screen.dart
+          grep -q "Fix & resubmit" lib/screens/my_stock_screen.dart
+          grep -q "Resubmit for review" lib/screens/edit_listing_screen.dart
+          grep -q "SfApproximateLocationMap" lib/screens/listing_detail_screen.dart
+          grep -q 'approximateRadiusKm' lib/screens/listing_detail_screen.dart
+          grep -q 'area only' lib/screens/listing_detail_screen.dart
+          grep -q "marketplaceConfig" lib/screens/home_screen.dart
+          grep -q "authMode" lib/screens/auth_screen.dart
+          grep -q "No account found" lib/screens/auth_screen.dart
+          grep -q "flutter_map" lib/widgets/sf_map.dart
+          grep -q "VideoPlayerController" lib/widgets/listing_media_gallery.dart
+          grep -q "pending_review" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "adminReviewListing" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "adminSetUserStatus" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "staging_listing_media" supabase/migrations/20260820090000_listing_moderation_media_admin_upgrade.sql
+          grep -q "stockflow_guard_session_account_status" supabase/migrations/20260820093000_account_session_status_guard.sql
+          grep -q "Use current location" lib/screens/sell_screen.dart
+          grep -q "House / Shop / Building" lib/screens/sell_screen.dart
+          grep -q "Street / Road" lib/screens/sell_screen.dart
+          grep -q "Area / Locality" lib/screens/sell_screen.dart
+          grep -q "Use current location" lib/screens/checkout_screen.dart
+          grep -q "currentAddress" lib/core/location_service.dart
+          grep -q "placemarkFromCoordinates" lib/core/location_service.dart
+          grep -q "publicListingSelect" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "action === 'feed'" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "saveListingLocation" lib/core/api.dart
+          grep -q "staging_listing_addresses" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "staging_listing_addresses" supabase/migrations/20260819111500_listing_address_records.sql
+          grep -Eq 'Exact coordinates.*private' lib/screens/sell_screen.dart
+          grep -q "stockflow-extensions" lib/core/api.dart
+          grep -q "stockflow-api-v3" lib/core/api.dart
+          grep -q "gemini-3.5-flash-lite" supabase/functions/stockflow-extensions/index.ts
+          grep -q "createDealRequest" lib/screens/listing_detail_screen.dart
+          grep -q "Unlock protected chat" lib/screens/chats_screen.dart
+          grep -q "requestPermission" lib/core/location_service.dart
+          grep -q "openLocationSettings" lib/core/location_service.dart
+          grep -q "stockflow_guard_message_insert" supabase/migrations/20260818214500_mediated_deals_web_security.sql
+          grep -q "stockflow_guard_listing_contact_exchange" supabase/migrations/20260818222000_listing_contact_exchange_hardening.sql
+          grep -q "SfAdSlot" lib/core/ad_config.dart
+          grep -q "SfListingGridSkeleton" lib/widgets/sf_ui.dart
+          grep -q "trackListingEvent" lib/screens/listing_detail_screen.dart
+          test -s lib/screens/not_found_screen.dart
+          test -s docs/404.html
+          grep -Eq '^  http: \^1\.6\.0$' pubspec.yaml
+          grep -Eq '^  geolocator: 14\.0\.3$' pubspec.yaml
+          grep -Eq '^  geocoding: 5\.0\.0$' pubspec.yaml
+          grep -Eq '^  flutter_map: \^8\.3\.1$' pubspec.yaml
+          grep -Eq '^  latlong2: \^0\.10\.1$' pubspec.yaml
+          grep -Eq '^  video_player: 2\.10\.1$' pubspec.yaml
+          ! grep -q "SegmentedButton" lib/screens/orders_screen.dart
+          ! grep -q "SegmentedButton" lib/screens/checkout_screen.dart
+          ! grep -q "SegmentedButton" lib/screens/sell_screen.dart
+          if grep -RInE 'Move stock\. Unlock value|Clearance radar|SELLER COMMAND|Inventory cockpit|Liquidate smarter|Demo Wholesale Co\.|0xFFC9F27B|0xFF090D0B' lib; then
+            echo 'Legacy prototype/AI-style UI token found.'
+            exit 1
+          fi
+          test "$(grep -RIl 'ProductImage' lib/screens | wc -l)" -ge 6
+
+      - name: Static analysis
+        run: flutter analyze --fatal-infos
+
+      - name: Unit tests
+        run: flutter test --reporter expanded
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: APK sanity check
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='build/app/outputs/flutter-apk/app-release.apk'
+          test -s "$APK"
+          test "$(stat -c%s "$APK")" -gt 1000000
+          unzip -t "$APK" >/dev/null
+
+          AAPT="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          "$AAPT" dump permissions "$APK" | tee /tmp/stockflow-apk-permissions.txt
+          grep -q 'android.permission.INTERNET' /tmp/stockflow-apk-permissions.txt
+          grep -q 'android.permission.ACCESS_COARSE_LOCATION' /tmp/stockflow-apk-permissions.txt
+          grep -q 'android.permission.ACCESS_FINE_LOCATION' /tmp/stockflow-apk-permissions.txt
+          ! grep -q 'android.permission.ACCESS_BACKGROUND_LOCATION' /tmp/stockflow-apk-permissions.txt
+
+          ls -lh "$APK"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: StockFlow-v1.5.0-Marketplace-Moderation-Android-Release
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  ios-compile:
+    name: iOS Unsigned Release Compile
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Source package preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            pubspec.yaml
+            lib/main.dart
+            lib/app.dart
+            lib/core/api.dart
+            lib/core/ad_config.dart
+            lib/core/diagnostics.dart
+            lib/core/location_service.dart
+            lib/core/motion.dart
+            lib/core/platform_ui.dart
+            lib/widgets/product_image.dart
+            lib/widgets/listing_card.dart
+            lib/widgets/sf_ui.dart
+            lib/widgets/sf_map.dart
+            lib/widgets/listing_media_gallery.dart
+            lib/screens/welcome_screen.dart
+            lib/screens/guest_account_screen.dart
+            lib/screens/auth_screen.dart
+            lib/screens/legal_screens.dart
+            lib/screens/home_shell.dart
+            lib/screens/home_screen.dart
+            lib/screens/chats_screen.dart
+            lib/screens/sell_screen.dart
+            lib/screens/my_stock_screen.dart
+            lib/screens/edit_listing_screen.dart
+            lib/screens/account_screen.dart
+            lib/screens/settings_screen.dart
+            lib/screens/help_safety_screen.dart
+            lib/screens/not_found_screen.dart
+            docs/404.html
+            docs/V140_GUEST_BROWSING_FULL_ADDRESS.md
+            docs/V150_MARKETPLACE_MODERATION_MEDIA_ADMIN.md
+            supabase/functions/stockflow-extensions/index.ts
+            supabase/functions/stockflow-api-v3/index.ts
+            supabase/functions/stockflow-staging-upload/index.ts
+            supabase/migrations/20260818121000_stockflow_client_final_features.sql
+            supabase/migrations/20260818122000_seller_approval_timestamps.sql
+            supabase/migrations/20260818122500_seller_approval_trigger_search_path_hardening.sql
+            supabase/migrations/20260818123000_client_feature_fk_index_hardening.sql
+            supabase/migrations/20260818214500_mediated_deals_web_security.sql
+            supabase/migrations/20260818222000_listing_contact_exchange_hardening.sql
+            supabase/migrations/20260818223000_mediated_deal_fk_indexes.sql
+            supabase/migrations/20260818224000_contact_filter_precision.sql
+            supabase/migrations/20260818224500_contact_phone_pattern_precision.sql
+            supabase/migrations/20260819110000_guest_browsing_full_addresses.sql
+            supabase/migrations/20260819111500_listing_address_records.sql
+            supabase/migrations/20260820090000_listing_moderation_media_admin_upgrade.sql
+            supabase/migrations/20260820093000_account_session_status_guard.sql
+            supabase/migrations/20260820110000_admin_pagination_indexes.sql
+            test/smoke_test.dart
+            branding/stockflow_icon_1024.png
+            branding/ios/AppIcon.appiconset/Contents.json
+            branding/ios/AppIcon.appiconset/Icon-AppStore-1024.png
+          )
+          for file in "${required[@]}"; do
+            if [[ ! -s "$file" ]]; then
+              echo "::error::Incomplete StockFlow source package: missing or empty $file"
+              exit 1
+            fi
+          done
+          echo "StockFlow source package preflight passed (${#required[@]} required files)."
+          grep -Eq '^  http: \^1\.6\.0$' pubspec.yaml
+          grep -Eq '^  geolocator: 14\.0\.3$' pubspec.yaml
+          grep -Eq '^  geocoding: 5\.0\.0$' pubspec.yaml
+          grep -Eq '^  flutter_map: \^8\.3\.1$' pubspec.yaml
+          grep -Eq '^  latlong2: \^0\.10\.1$' pubspec.yaml
+          grep -Eq '^  video_player: 2\.10\.1$' pubspec.yaml
+          echo 'Dependency compatibility preflight passed (network + location + maps + media).'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Generate Android/iOS platform shells
+        run: |
+          flutter create --platforms=android,ios --org com.stockflow --project-name stockflow .
+          rm -f test/widget_test.dart
+          rm -rf ios/Runner/Assets.xcassets/AppIcon.appiconset
+          cp -R branding/ios/AppIcon.appiconset ios/Runner/Assets.xcassets/AppIcon.appiconset
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+          p = Path('ios/Runner/Info.plist')
+          with p.open('rb') as f:
+              data = plistlib.load(f)
+          data['CFBundleDisplayName'] = 'StockFlow'
+          data['CFBundleName'] = 'StockFlow'
+          data['NSLocationWhenInUseUsageDescription'] = 'StockFlow uses your location only when you choose Use current location to fill a stock or delivery address.'
+          with p.open('wb') as f:
+              plistlib.dump(data, f)
+
+          pod = Path('ios/Podfile')
+          if pod.exists():
+              pod_text = pod.read_text()
+              marker = '    flutter_additional_ios_build_settings(target)\n'
+              location_macro = "    target.build_configurations.each do |config|\n      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']\n      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'BYPASS_PERMISSION_LOCATION_ALWAYS=1'\n    end\n"
+              if 'BYPASS_PERMISSION_LOCATION_ALWAYS=1' not in pod_text:
+                  pod_text = pod_text.replace(marker, marker + location_macro, 1)
+                  pod.write_text(pod_text)
+          else:
+              print('No ios/Podfile generated: Flutter Swift Package Manager path is active; continuing without CocoaPods-only patch.')
+          PY
+          test -s ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-AppStore-1024.png
+          if [[ -f ios/Podfile ]]; then
+            grep -q 'BYPASS_PERMISSION_LOCATION_ALWAYS=1' ios/Podfile
+          else
+            echo 'SwiftPM iOS shell detected (Flutter 3.44+ default); Podfile-specific geolocator macro check skipped.'
+          fi
+          /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' ios/Runner/Info.plist
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Client safety + design guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'sb_secret_|SUPABASE_SERVICE_ROLE_KEY|service_role' lib; then
+            echo 'Privileged Supabase credential reference found in Flutter client.'
+            exit 1
+          fi
+          if grep -RInE 'AQ\.[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{20,}' lib docs supabase .github --exclude='*.zip'; then
+            echo 'AI provider credential leaked into the repository.'
+            exit 1
+          fi
+          if grep -RInE 'Move stock\. Unlock value|Clearance radar|SELLER COMMAND|Inventory cockpit|Liquidate smarter|Demo Wholesale Co\.|0xFFC9F27B|0xFF090D0B' lib; then
+            echo 'Legacy prototype/AI-style UI token found.'
+            exit 1
+          fi
+          test -s lib/core/platform_ui.dart
+          test -s lib/core/motion.dart
+          test -s lib/widgets/product_image.dart
+          test -s branding/stockflow_icon_1024.png
+          test -s lib/screens/guest_account_screen.dart
+          ! grep -q "LandingScreen" lib/app.dart
+          grep -q "WelcomeScreen" lib/app.dart
+          grep -q "sf_welcome_v3_seen" lib/app.dart
+          grep -q "Surplus stock" lib/screens/welcome_screen.dart
+          grep -q "Browse stock as guest" lib/screens/welcome_screen.dart
+          grep -q "HomeShell" lib/app.dart
+          grep -q "GuestAccountScreen" lib/screens/home_shell.dart
+          grep -q "You’re browsing as a guest" lib/screens/guest_account_screen.dart
+          grep -q 'Create your account' lib/screens/auth_screen.dart
+          grep -q 'Enter the 6-digit code' lib/screens/auth_screen.dart
+          grep -q 'Welcome back' lib/screens/auth_screen.dart
+          grep -q 'Terms & Conditions' lib/screens/auth_screen.dart
+          grep -q 'Privacy Policy' lib/screens/auth_screen.dart
+          test -s lib/screens/legal_screens.dart
+          test -s lib/screens/my_stock_screen.dart
+          grep -q "label: 'My stock'" lib/screens/home_shell.dart
+          grep -q "title: 'Settings'" lib/screens/account_screen.dart
+          grep -q "title: 'Help & safety'" lib/screens/account_screen.dart
+          grep -q "label: 'Deals'" lib/screens/home_shell.dart
+          grep -q "label: 'Sell'" lib/screens/home_shell.dart
+          grep -q "Browse categories" lib/screens/home_screen.dart
+          grep -q "Fresh stock" lib/screens/home_screen.dart
+          grep -q "Recently viewed" lib/screens/home_screen.dart
+          grep -q "label: 'Buying'" lib/screens/chats_screen.dart
+          grep -q "label: 'Selling'" lib/screens/chats_screen.dart
+          grep -q "I’m interested" lib/screens/listing_detail_screen.dart
+          ! grep -q "Make offer" lib/screens/listing_detail_screen.dart
+          grep -q "Checkout" lib/screens/checkout_screen.dart
+          grep -Eq 'Step \$\{step\+1\} of 4|Step \$\{step \+ 1\} of 4' lib/screens/sell_screen.dart
+          grep -q "Submit for review" lib/screens/sell_screen.dart
+          grep -Eq 'Generate.*AI' lib/screens/sell_screen.dart
+          grep -q "pickMultipleMedia" lib/screens/sell_screen.dart
+          grep -q "maxMedia = 8" lib/screens/sell_screen.dart
+          grep -q "maxVideos = 2" lib/screens/sell_screen.dart
+          grep -q "maxVideoSeconds = 30" lib/screens/sell_screen.dart
+          grep -q "GSTIN (optional)" lib/screens/sell_screen.dart
+          grep -q "Choose on map" lib/screens/sell_screen.dart
+          grep -q "Submitted for review" lib/screens/sell_screen.dart
+          grep -q "Fix & resubmit" lib/screens/my_stock_screen.dart
+          grep -q "Resubmit for review" lib/screens/edit_listing_screen.dart
+          grep -q "SfApproximateLocationMap" lib/screens/listing_detail_screen.dart
+          grep -q 'approximateRadiusKm' lib/screens/listing_detail_screen.dart
+          grep -q 'area only' lib/screens/listing_detail_screen.dart
+          grep -q "marketplaceConfig" lib/screens/home_screen.dart
+          grep -q "authMode" lib/screens/auth_screen.dart
+          grep -q "No account found" lib/screens/auth_screen.dart
+          grep -q "flutter_map" lib/widgets/sf_map.dart
+          grep -q "VideoPlayerController" lib/widgets/listing_media_gallery.dart
+          grep -q "pending_review" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "adminReviewListing" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "adminSetUserStatus" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "staging_listing_media" supabase/migrations/20260820090000_listing_moderation_media_admin_upgrade.sql
+          grep -q "stockflow_guard_session_account_status" supabase/migrations/20260820093000_account_session_status_guard.sql
+          grep -q "Use current location" lib/screens/sell_screen.dart
+          grep -q "House / Shop / Building" lib/screens/sell_screen.dart
+          grep -q "Street / Road" lib/screens/sell_screen.dart
+          grep -q "Area / Locality" lib/screens/sell_screen.dart
+          grep -q "Use current location" lib/screens/checkout_screen.dart
+          grep -q "currentAddress" lib/core/location_service.dart
+          grep -q "placemarkFromCoordinates" lib/core/location_service.dart
+          grep -q "publicListingSelect" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "action === 'feed'" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "saveListingLocation" lib/core/api.dart
+          grep -q "staging_listing_addresses" supabase/functions/stockflow-api-v3/index.ts
+          grep -q "staging_listing_addresses" supabase/migrations/20260819111500_listing_address_records.sql
+          grep -Eq 'Exact coordinates.*private' lib/screens/sell_screen.dart
+          grep -q "stockflow-extensions" lib/core/api.dart
+          grep -q "stockflow-api-v3" lib/core/api.dart
+          grep -q "gemini-3.5-flash-lite" supabase/functions/stockflow-extensions/index.ts
+          grep -q "createDealRequest" lib/screens/listing_detail_screen.dart
+          grep -q "Unlock protected chat" lib/screens/chats_screen.dart
+          grep -q "requestPermission" lib/core/location_service.dart
+          grep -q "openLocationSettings" lib/core/location_service.dart
+          grep -q "stockflow_guard_message_insert" supabase/migrations/20260818214500_mediated_deals_web_security.sql
+          grep -q "stockflow_guard_listing_contact_exchange" supabase/migrations/20260818222000_listing_contact_exchange_hardening.sql
+          grep -q "SfAdSlot" lib/core/ad_config.dart
+          grep -q "SfListingGridSkeleton" lib/widgets/sf_ui.dart
+          grep -q "trackListingEvent" lib/screens/listing_detail_screen.dart
+          test -s lib/screens/not_found_screen.dart
+          test -s docs/404.html
+          grep -Eq '^  http: \^1\.6\.0$' pubspec.yaml
+          grep -Eq '^  geolocator: 14\.0\.3$' pubspec.yaml
+          grep -Eq '^  geocoding: 5\.0\.0$' pubspec.yaml
+          grep -Eq '^  flutter_map: \^8\.3\.1$' pubspec.yaml
+          grep -Eq '^  latlong2: \^0\.10\.1$' pubspec.yaml
+          grep -Eq '^  video_player: 2\.10\.1$' pubspec.yaml
+          ! grep -q "SegmentedButton" lib/screens/orders_screen.dart
+          ! grep -q "SegmentedButton" lib/screens/checkout_screen.dart
+          ! grep -q "SegmentedButton" lib/screens/sell_screen.dart
+
+      - name: Static analysis
+        run: flutter analyze --fatal-infos
+
+      - name: Unit tests
+        run: flutter test --reporter expanded
+
+      - name: iOS unsigned release compile
+        run: flutter build ios --release --no-codesign
+
+      - name: iOS app sanity check
+        run: test -d build/ios/iphoneos/Runner.app
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: StockFlow-v1.5.0-Marketplace-Moderation-iOS-Unsigned-App
+          path: build/ios/iphoneos/Runner.app
+          if-no-files-found: error
+          retention-days: 14

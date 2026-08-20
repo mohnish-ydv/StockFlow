@@ -1,0 +1,39 @@
+StockFlow v1.2.0 local release audit
+====================================
+Target version: 1.2.0+18
+
+Implemented client-final requirements:
+- Seller current-location capture with foreground-only permissions
+- Private exact listing coordinates + admin-only map analytics
+- Gemini-backed server-side listing description/category assist
+- 4-step simplified seller posting journey
+- Admin day/week/month/all counts + 14-day charts
+- Product performance analytics
+- Category distribution + location area counts
+- Client incident/error references and admin diagnostics
+- Skeleton loading states
+- In-app + GitHub Pages 404 handling
+- Stable ad-slot integration hooks (provider disabled by default)
+- Admin/mobile cobalt visual consistency
+
+Backend staging migrations applied:
+- stockflow_client_final_features
+- seller_approval_timestamps
+- seller_approval_trigger_search_path_hardening
+- client_feature_fk_index_hardening
+
+Edge Function:
+- stockflow-extensions v2 deployed
+
+Local checks expected before packaging:
+- YAML/JSON parse
+- local Dart import resolution
+- Dart delimiter scan
+- inline admin JavaScript syntax check
+- no merge markers
+- no embedded AI credential
+- version/artifact guards
+- ZIP integrity
+
+Flutter/Dart SDK is not installed in this packaging environment.
+GitHub Actions is the authoritative analyzer/widget/APK/iOS compile gate.

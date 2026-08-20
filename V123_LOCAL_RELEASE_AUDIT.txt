@@ -1,0 +1,27 @@
+StockFlow v1.2.3 local release audit
+Target version: 1.2.3+21
+
+Observed CI failure:
+- StockFlow Admin Pages validate job failed on html.count('</script>') == 1.
+- Admin HTML intentionally contains one external Leaflet script and one inline StockFlow app script, so there are two closing script tags.
+- This was a validator false positive; the admin HTML structure is valid.
+
+Repair:
+- Admin Pages validator now requires balanced opening/closing script tags.
+- Exactly one inline StockFlow application script is still required.
+- External Leaflet script presence is explicitly validated.
+- Existing privileged-credential guard remains intact.
+
+Local checks:
+- Admin static validation: PASS
+- Admin inline JS node --check: PASS
+- Workflow YAML parsing: PASS
+- JSON parsing: PASS
+- Relative Dart imports: PASS
+- Dart source delimiter smoke scan: PASS
+- Exact Gemini key leakage scan: PASS
+- Client/admin privileged secret guard: PASS
+- Version/artifact guards: PASS
+- ZIP integrity: PASS
+
+Flutter SDK is not installed in this packaging environment; GitHub Actions remains the authoritative Flutter analyze/test/build gate.
